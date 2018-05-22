@@ -100,6 +100,41 @@ cdef void fast_sentence_sg_hs(
     our_saxpy(&size, &word_locks[word2_index], work, &ONE, &syn0[row1], &ONE)
 
 
+cdef void fast_sentence_sg_hs_topic(
+    const np.uint32_t *word_point, const np.uint8_t *word_code, const int codelen,
+    REAL_t *syn0, REAL_t *syn1, REAL_t *syn0_topic, const int size,
+    const np.uint32_t word2_index, const REAL_t alpha, REAL_t *work, REAL_t *word_locks,
+    const int _compute_loss, REAL_t *_running_training_loss_param) nogil:
+
+    cdef long long a, b
+    cdef long long row1 = word2_index * size, row2, sgn
+    cdef REAL_t f, g, f_dot, lprob
+
+    memset(work, 0, size * cython.sizeof(REAL_t))
+    for b in range(codelen):
+        row2 = word_point[b] * size
+        #f_dot = our_dot(&size, &syn0[row1], &ONE, &syn1[row2], &ONE)
+        f_dot = our_dot(&size, &syn0_topic[row1], &ONE, &syn1[row2], &ONE)
+        if f_dot <= -MAX_EXP or f_dot >= MAX_EXP:
+            continue
+        f = EXP_TABLE[<int>((f_dot + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
+        g = (1 - word_code[b] - f) * alpha
+
+        if _compute_loss == 1:
+            sgn = (-1)**word_code[b]  # ch function: 0-> 1, 1 -> -1
+            lprob = -1*sgn*f_dot
+            if lprob <= -MAX_EXP or lprob >= MAX_EXP:
+                continue
+            lprob = LOG_TABLE[<int>((lprob + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]
+            _running_training_loss_param[0] = _running_training_loss_param[0] - lprob
+
+        our_saxpy(&size, &g, &syn1[row2], &ONE, work, &ONE)
+        #our_saxpy(&size, &g, &syn0[row1], &ONE, &syn1[row2], &ONE)
+        our_saxpy(&size, &g, &syn0_topic[row1], &ONE, &syn1[row2], &ONE)
+
+    #our_saxpy(&size, &word_locks[word2_index], work, &ONE, &syn0[row1], &ONE)
+    our_saxpy(&size, &word_locks[word2_index], work, &ONE, &syn0[row1], &ONE)
+
 # to support random draws from negative-sampling cum_table
 cdef inline unsigned long long bisect_left(np.uint32_t *a, unsigned long long x, unsigned long long lo, unsigned long long hi) nogil:
     cdef unsigned long long mid
@@ -555,8 +590,7 @@ def train_batch_sg_topic(model, sentences, alpha, _work, compute_loss):
                     if j == i:
                         continue
                     if hs:
-                        #raise ValueError("Not Implemented!")
-                        pass
+                        fast_sentence_sg_hs_topic(points[i], codes[i], codelens[i], syn0, syn1, syn0_topic, size, topic[j], _alpha, work, word_locks, _compute_loss, &_running_training_loss)
                         #fast_sentence_sg_hs(points[i], codes[i], codelens[i], syn0, syn1, size, indexes[j], _alpha, work, word_locks, _compute_loss, &_running_training_loss)
                     if negative:
                         next_random = fast_sentence_sg_neg_topic(negative, cum_table, cum_table_len, syn0, syn1neg, syn0_topic, size, indexes[i], topic[j], _alpha, work, next_random, word_locks, _compute_loss, &_running_training_loss)

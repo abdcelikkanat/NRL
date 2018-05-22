@@ -10,18 +10,18 @@ import time
 
 
 
-dataset = "citeseer"
+dataset = "blogcatalog"
 networkx_graph_path = "./datasets/{}.gml".format(dataset)
 
-method_name = "deepwalk"
+method_name = "node2vec"
 embedding_size = 128
 number_of_walks = 40
 walk_length = 10
 workers = 3
-negative_size = 5
+
 
 window_size = 10
-number_of_topics = 65
+number_of_topics = 80
 
 
 g = nx.read_gml(networkx_graph_path)
@@ -31,11 +31,11 @@ params = dict()
 params['number_of_walks'] = number_of_walks
 params['walk_length'] = walk_length
 params['alpha'] = 0
-params['p'] = 0.5
-params['q'] = 0.5
+params['p'] = 1.0
+params['q'] = 1.0
 
 
-corpus_file = "./temp/{}_n{}_l{}_{}.corpus".format(dataset, number_of_walks, walk_length, method_name)
+corpus_file = "./temp/{}_n{}_l{}_k{}_{}.corpus".format(dataset, number_of_walks, walk_length, number_of_topics, method_name)
 node_embedding_file = "./output/{}_n{}_l{}_w{}_k{}_{}_node.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
 topic_embedding_file = "./output/{}_n{}_l{}_w{}_k{}_{}_topic.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
 concatenated_embedding_file_max = "./output/{}_n{}_l{}_w{}_k{}_{}_final_max.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
@@ -53,8 +53,8 @@ print("-> The corpus was generated and saved in {:.2f} secs | {}".format((time.t
 
 initial_time = time.time()
 # Extract the node embeddings
-model = Word2Vec(walks, size=embedding_size, window=window_size, sg=1, hs=0,
-                 workers=workers, negative=negative_size,
+model = Word2Vec(walks, size=embedding_size, window=window_size, sg=1, hs=1,
+                 workers=workers,
                  sample=0.001, min_count=0)
 # Save the node embeddings
 model.wv.save_word2vec_format(fname=node_embedding_file)
@@ -64,7 +64,8 @@ print("-> The node embeddings were generated and saved in {:.2f} secs | {}".form
 initial_time = time.time()
 # Run GibbsLDA++
 lda_corpus_path = corpus_file
-cmd = "{} -est -alpha {} -beta {} -savestep {} -ntopics {} -niters {} -dfile {}".format(lda_exe_path, 0.5, 0.1, 1000, number_of_topics, 1000, lda_corpus_path)
+lda_alpha = 50.0/float(number_of_topics)
+cmd = "{} -est -alpha {} -beta {} -savestep {} -ntopics {} -niters {} -dfile {}".format(lda_exe_path, lda_alpha, 0.1, 2000, number_of_topics, 2000, lda_corpus_path)
 os.system(cmd)
 print("-> The LDA algorithm run in {:.2f} secs".format(time.time()-initial_time))
 
