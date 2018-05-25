@@ -1,16 +1,10 @@
 import sys
-sys.path.append("./lib/deepwalk/deepwalk")
-sys.path.append("./lib/node2vec/src")
-
-import os
-from corpus.corpus import *
-#from lib.updatedgensim.models.word2vec import Word2Vec, CombineSentence
-import utils
+sys.path.append("./ext/deepwalk/deepwalk")
+sys.path.append("./ext/node2vec/src")
 import time
+from corpus.corpus import *
+from ext.updatedgensim.models.word2vec import *
 
-from utils import utils
-from lib.updatedgensim.models.word2vec import *
-from utils import *
 
 dataset = "citeseer"
 networkx_graph_path = "./datasets/{}.gml".format(dataset)
