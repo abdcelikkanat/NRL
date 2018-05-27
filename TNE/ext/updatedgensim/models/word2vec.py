@@ -271,5 +271,5 @@ class CombineSentences(object):
         self.node_filename = node_filename
 
     def __iter__(self):
-        for nodes, topics in zip(Text8Corpus(self.node_filename), Text8Corpus(self.topic_filename)):
+        for nodes, topics in zip(LineSentence(self.node_filename), LineSentence(self.topic_filename)):
             yield [(u, int(v)) for (u, v) in zip(nodes, topics)]

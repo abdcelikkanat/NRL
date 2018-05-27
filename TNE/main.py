@@ -1,7 +1,9 @@
 import sys
 sys.path.append("./ext/deepwalk/deepwalk")
 sys.path.append("./ext/node2vec/src")
+import os
 import time
+from utils.utils import *
 from corpus.corpus import *
 from ext.updatedgensim.models.word2vec import *
 
@@ -32,24 +34,25 @@ params['q'] = 1.0
 
 
 corpus_file = "./temp/{}_n{}_l{}_k{}_{}.corpus".format(dataset, number_of_walks, walk_length, number_of_topics, method_name)
-node_embedding_file = "./output/{}_n{}_l{}_w{}_k{}_{}_node.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
-topic_embedding_file = "./output/{}_n{}_l{}_w{}_k{}_{}_topic.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
-concatenated_embedding_file_max = "./output/{}_n{}_l{}_w{}_k{}_{}_final_max.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
-concatenated_embedding_file_avg = "./output/{}_n{}_l{}_w{}_k{}_{}_final_avg.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
-concatenated_embedding_file_min = "./output/{}_n{}_l{}_w{}_k{}_{}_final_min.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
-lda_exe_path = "./lib/gibbslda/lda"
+node_embedding_file = "./outputs/{}_n{}_l{}_w{}_k{}_{}_node.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
+topic_embedding_file = "./outputs/{}_n{}_l{}_w{}_k{}_{}_topic.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
+concatenated_embedding_file_max = "./outputs/{}_n{}_l{}_w{}_k{}_{}_final_max.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
+concatenated_embedding_file_avg = "./outputs/{}_n{}_l{}_w{}_k{}_{}_final_avg.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
+concatenated_embedding_file_min = "./outputs/{}_n{}_l{}_w{}_k{}_{}_final_min.embedding".format(dataset, number_of_walks, walk_length, window_size, number_of_topics, method_name)
+lda_exe_path = "./ext/gibbslda/lda"
 
 initial_time = time.time()
 # Generate a corpus
 corpus = Corpus(g)
 walks = corpus.graph2walks(method=method_name, params=params)
-# Save the corpus
-corpus.save(filename=corpus_file, with_title=True)
-print("-> The corpus was generated and saved in {:.2f} secs | {}".format((time.time()-initial_time), corpus_file))
 
+# Save the corpus
+#corpus.save(filename=corpus_file, with_title=True, save_one_line=True)
+corpus.save(filename=corpus_file, with_title=False, save_one_line=False)
+print("-> The corpus was generated and saved in {:.2f} secs | {}".format((time.time()-initial_time), corpus_file))
 initial_time = time.time()
 # Extract the node embeddings
-model = TNEWord2Vec(sentences=walks, size=embedding_size, window=window_size, sg=1, hs=1, workers=workers,
+model = TNEWord2Vec(sentences=LineSentence(corpus_file), size=embedding_size, window=window_size, sg=1, hs=1, workers=workers,
                     sample=0.001, min_count=0)
 # Save the node embeddings
 model.wv.save_word2vec_format(fname=node_embedding_file)
@@ -57,9 +60,13 @@ print("-> The node embeddings were generated and saved in {:.2f} secs | {}".form
 
 initial_time = time.time()
 # Run GibbsLDA++
-lda_corpus_path = corpus_file
+lda_corpus_path = "./temp/lda_node_with_title.file"
+# Generate sentences in the following form: (node, topic)
+corpus.save(filename=lda_corpus_path, with_title=True, save_one_line=False)
 lda_alpha = 50.0/float(number_of_topics)
-cmd = "{} -est -alpha {} -beta {} -ntopics {} -niters {} -dfile {}".format(lda_exe_path, lda_alpha, 0.1, number_of_topics, 200, lda_corpus_path)
+lda_beta = 0.1
+lda_number_of_iters = 100
+cmd = "{} -est -alpha {} -beta {} -ntopics {} -niters {} -savestep {} -dfile {}".format(lda_exe_path, lda_alpha, lda_beta, number_of_topics, lda_number_of_iters, lda_number_of_iters+1, lda_corpus_path)
 os.system(cmd)
 print("-> The LDA algorithm run in {:.2f} secs".format(time.time()-initial_time))
 
@@ -73,13 +80,15 @@ phi_file = "./temp/model-final.phi"
 
 initial_time = time.time()
 # Convert node corpus to the corresponding topic corpus
-utils.convert2topic_corpus(tassignfile, lda_topic_corpus)
+convert2topic_corpus(tassignfile, lda_topic_corpus)
 # Generate sentences in the following form: (node, topic)
-corpus.save(filename=lda_node_corpus, with_title=False)
+corpus.save(filename=lda_node_corpus, with_title=False, save_one_line=False)
 # Construct the tuples (word, topic) with each word in the corpus and its corresponding topic assignment
 combined_sentences = CombineSentences(lda_node_corpus, lda_topic_corpus)
 # Extract the topic embeddings
+print("BURDA1")
 model.train_topic(number_of_topics, combined_sentences)
+print("BURDA2")
 
 # Save the topic embeddings
 model.wv.save_word2vec_topic_format(fname=topic_embedding_file)
@@ -87,20 +96,20 @@ print("-> The topic embeddings were generated and saved in {:.2f} secs | {}".for
 
 
 # Generate the id2node dictionary
-id2node = utils.generate_id2node(wordmapfile)
+id2node = generate_id2node(wordmapfile)
 # Compute the corresponding topics for each node
 initial_time = time.time()
-node2topic_max = utils.find_max_topic_for_nodes(phi_file, id2node, number_of_nodes, number_of_topics)
+node2topic_max = find_max_topic_for_nodes(phi_file, id2node, number_of_nodes, number_of_topics)
 # Concatenate the embeddings
-utils.concatenate_embeddings(node_embedding_file=node_embedding_file,
-                       topic_embedding_file=topic_embedding_file,
-                       node2topic=node2topic_max,
-                       output_filename=concatenated_embedding_file_max)
+concatenate_embeddings_max(node_embedding_file=node_embedding_file,
+                           topic_embedding_file=topic_embedding_file,
+                           node2topic=node2topic_max,
+                           output_filename=concatenated_embedding_file_max)
 print("-> The final_max embeddings were generated and saved in {:.2f} secs | {}".format((time.time()-initial_time), concatenated_embedding_file_max))
 
 # Concatenate the embeddings
 initial_time = time.time()
-utils.concatenate_embeddings_avg(node_embedding_file=node_embedding_file,
+concatenate_embeddings_avg(node_embedding_file=node_embedding_file,
                            topic_embedding_file=topic_embedding_file,
                            phi_file=phi_file,
                            id2node=id2node,
@@ -108,10 +117,10 @@ utils.concatenate_embeddings_avg(node_embedding_file=node_embedding_file,
 print("-> The final_avg embeddings were generated and saved in {:.2f} secs | {}".format((time.time()-initial_time), concatenated_embedding_file_avg))
 
 initial_time = time.time()
-node2topic_min = utils.find_min_topic_for_nodes(phi_file, id2node, number_of_nodes, number_of_topics)
+node2topic_min = find_min_topic_for_nodes(phi_file, id2node, number_of_nodes, number_of_topics)
 # Concatenate the embeddings
 
-utils.concatenate_embeddings_min(node_embedding_file=node_embedding_file,
+concatenate_embeddings_min(node_embedding_file=node_embedding_file,
                            topic_embedding_file=topic_embedding_file,
                            node2topic=node2topic_min,
                            output_filename=concatenated_embedding_file_min)
