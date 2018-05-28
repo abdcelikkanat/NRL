@@ -65,7 +65,7 @@ lda_corpus_path = "./temp/lda_node_with_title.file"
 corpus.save(filename=lda_corpus_path, with_title=True, save_one_line=False)
 lda_alpha = 50.0/float(number_of_topics)
 lda_beta = 0.1
-lda_number_of_iters = 100
+lda_number_of_iters = 1000
 cmd = "{} -est -alpha {} -beta {} -ntopics {} -niters {} -savestep {} -dfile {}".format(lda_exe_path, lda_alpha, lda_beta, number_of_topics, lda_number_of_iters, lda_number_of_iters+1, lda_corpus_path)
 os.system(cmd)
 print("-> The LDA algorithm run in {:.2f} secs".format(time.time()-initial_time))
@@ -86,9 +86,8 @@ corpus.save(filename=lda_node_corpus, with_title=False, save_one_line=False)
 # Construct the tuples (word, topic) with each word in the corpus and its corresponding topic assignment
 combined_sentences = CombineSentences(lda_node_corpus, lda_topic_corpus)
 # Extract the topic embeddings
-print("BURDA1")
 model.train_topic(number_of_topics, combined_sentences)
-print("BURDA2")
+
 
 # Save the topic embeddings
 model.wv.save_word2vec_topic_format(fname=topic_embedding_file)
